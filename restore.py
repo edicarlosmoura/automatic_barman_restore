@@ -4,6 +4,7 @@ import ConfigParser
 import subprocess
 import time
 import datetime
+import psycopg2
 
 def __run__(params):
 
@@ -92,7 +93,7 @@ def __run__(params):
 			result = p.communicate()[0]
 			
 			if actionPostgres('start') == "TRUE":
-				while testeUpPostgres() == "FALSE":
+				while testUpPostgres() == "FALSE":
 					time.sleep(10)
 				executePgdump()
 			
