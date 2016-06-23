@@ -92,6 +92,8 @@ def __run__(params):
 			result = p.communicate()[0]
 			
 			if actionPostgres('start') == "TRUE":
+				while testeUpPostgres() == "FALSE":
+					time.sleep(10)
 				executePgdump()
 			
 
@@ -139,6 +141,12 @@ def __run__(params):
 	def rmlock():
 		p = subprocess.Popen(['rm', '-f', '/tmp/restore.lock'],  stdout=subprocess.PIPE)
 		result = p.communicate()[0]
+
+        def testUpPostgres():
+                try:
+                        conn = psycopg2.connect('user=postgres')
+                except Exception, e:
+                        return "FALSE"
 
 if lock() == "TRUE":
 	if validaRestore() == "TRUE":
