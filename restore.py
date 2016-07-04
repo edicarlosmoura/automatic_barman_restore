@@ -18,8 +18,7 @@ def __run__(params):
 	database = config.get('restore','database')
 	backup_host = config.get('restore','backup_host')
 	pgsql_version = config.get('restore','pgsql_version')
-	date_backup = config.get('restore','date_backup')
-	hour_backup = config.get('restore','hour_backup')
+	target = config.get('restore','target')
 	restore_dir = config.get('restore','restore_dir')
 	
 	datadir_dest = config.get('master_config','datadir_dest')
@@ -29,7 +28,7 @@ def __run__(params):
 	ip_pgrestore = config.get('master_config','ip_pgrestore')
 
 
-	def validaRestore():	
+	def validaRestore():
 
 		if backup_host == restore_host:
 			print "Same Backup host and Restore host"
@@ -39,44 +38,20 @@ def __run__(params):
 			print "- Restore host OK"
 			return "TRUE"
 
-
-	def getBackup():
+	def getBackup(target):
 
 		# Get backup list
 		command = 'barman list-backup ' + backup_host
 		p = subprocess.Popen(['ssh', 'barman@'+ip_barman, command], shell=False, stdout=subprocess.PIPE)
 		list_backup = p.communicate()[0]
-	
-		first_backup  = list_backup.splitlines()[0]
-		miadle_backup = list_backup.splitlines()[1]
-		lasted_backup = list_backup.splitlines()[2]
-
-		first_backup  = first_backup.split(' ')[1]
-		miadle_backup = miadle_backup.split(' ')[1]
-		lasted_backup = lasted_backup.split(' ')[1]
-
-		first_backup  = first_backup.split('T')
-		miadle_backup = miadle_backup.split('T')
-		lasted_backup = lasted_backup.split('T')
-
-
-		if (date_backup > first_backup[0]):
-			return first_backup[0]+'T'+first_backup[1]
-		elif (date_backup == first_backup[0]) and (hour_backup >= first_backup[1]):
-			return first_backup[0]+'T'+first_backup[1]
-		elif (date_backup > miadle_backup[0]):
-			return miadle_backup[0]+'T'+miadle_backup[1]
-		elif (date_backup == miadle_backup[0]) and (hour_backup >= miadle_backup[1]):
-			return miadle_backup[0]+'T'+miadle_backup[1]
-		elif (date_backup > lasted_backup[0]):
-			return lasted_backup[0]+'T'+lasted_backup[1]
-		elif (date_backup == lasted_backup[0]) and (hour_backup >= lasted_backup[1]):
-			return lasted_backup[0]+'T'+lasted_backup[1]
-		else:
-			print "- Backup asked was retention out. Available Date: {0} - Available Hour: {1}" .format(lasted_backup[0], lasted_backup[1])
-			rmlock()
-			return "FALSE"
-
+		
+		target = datetime.datetime.strptime(target, "%Y-%m-%d %H:%M:%S")
+		for line in list_backup.splitlines():
+			x = line.split(' - ')[1]
+			y = datetime.datetime.strptime(x, '%c')
+			if y <= target:
+				return line.split(' - ')[0]
+				break
 
 	def executeRestore():
 
@@ -88,7 +63,7 @@ def __run__(params):
 			print "- Restore in progress\n"
 			print "- Restore process can be time consuming, please waiting conclusion\n"
 
-			command = 'barman recover --remote-ssh-command="ssh postgres@' + ip_pgrestore + '" --target-time "' + date_backup +' '+ hour_backup +'" '+ backup_host + ' ' + getBackup() + ' ' + datadir_dest
+			command = 'barman recover --remote-ssh-command="ssh postgres@' + ip_pgrestore + '" --target-time "' + target + '" ' + getBackup(target) + ' ' + datadir_dest
 			p = subprocess.Popen(['ssh', 'barman@'+ip_barman, command], shell=False, stdout=subprocess.PIPE)
 			result = p.communicate()[0]
 			
@@ -96,7 +71,9 @@ def __run__(params):
 				while testUpPostgres() == "FALSE":
 					time.sleep(10)
 				executePgdump()
-			
+		else:
+			print "- Backup requested this out of retention"
+			rmlock()
 
 	def actionPostgres(action):
 		print '- Effecting '+action+' local PostgreSQL service.'
@@ -151,7 +128,8 @@ def __run__(params):
 
 if lock() == "TRUE":
 	if validaRestore() == "TRUE":
-		executeRestore()
+		if getBackup(target) != "FALSE":
+			executeRestore()
 	
 
 if __name__ == '__main__':
